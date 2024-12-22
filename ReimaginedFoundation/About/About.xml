@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+	<name>Reimagined Foundation</name>
+	<author>Libmort</author>
+	<packageId>libmort.reimaginedfoundation</packageId>
+	<supportedVersions>
+		<li>1.5</li>
+	</supportedVersions>
+	<description>
+	</description>
+</ModMetaData>
