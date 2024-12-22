@@ -4,7 +4,7 @@ using System.Linq;
 using UnityEngine;
 using Verse;
 
-namespace RimworldTest.Utility
+namespace ReimaginedFoundation
 {
     public abstract class ThingCompVirtualThingHolder : ThingComp, IThingRequester
     {
