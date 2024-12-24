@@ -53,7 +53,7 @@ namespace ReimaginedFoundation
                         T comp = job.GetTarget(TargetIndex.A).Thing.TryGetComp<T>();
                         IThingRequester ingredientsHolder = comp as IThingRequester;
 
-                        ingredientsHolder.OnThingHauled(new ThingCount(thing, i));
+                        ingredientsHolder.OnThingHauled(thing);
                     });
                 });
             }

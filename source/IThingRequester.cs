@@ -9,7 +9,7 @@ namespace ReimaginedFoundation
 
         bool CanReceiveThings { get; }
 
-        void OnThingHauled(ThingCount thingCount);
+        void OnThingHauled(Thing thing);
 
         ThingCount GetRequestedThing();
         List<ThingCount> GetRequestedThings();
