@@ -11,7 +11,7 @@ namespace ReimaginedFoundation
 
         void OnThingHauled(Thing thing);
 
-        ThingCount GetRequestedThing();
-        List<ThingCount> GetRequestedThings();
+        ThingCountClass TryRequestedThing();
+        List<ThingCountClass> GetRequestedThings();
     }
 }

@@ -9,51 +9,66 @@ namespace ReimaginedFoundation
     public abstract class ThingCompVirtualThingHolder : ThingComp, IThingRequester
     {
         protected Dictionary<ThingDef, int> _expectedThings = new Dictionary<ThingDef, int>();
-        protected Dictionary<ThingDef, Thing> _insertedThings = new Dictionary<ThingDef, Thing>();
+        protected List<Thing> _insertedThings = new List<Thing>();
 
         public virtual Dictionary<ThingDef, int> ExpectedThings => _expectedThings;
 
         public abstract bool CanReceiveThings {  get; }
 
-        public virtual ThingCount GetRequestedThing() 
+        public virtual ThingCountClass TryRequestedThing() 
         {
             foreach (var pair in _expectedThings)
             {
-                Thing thing = FindThing(pair.Key);
-                if (thing != null)
+                // Find the specific thing based on its definition
+                Thing thingToRequest = FindThing(pair.Key);
+
+                if (thingToRequest != null)
                 {
-                    if (!_insertedThings.ContainsKey(pair.Key))
+                    int requiredCount = pair.Value; // How many are needed
+                    int insertedCount = GetInsertedThingCount(pair.Key);
+
+                    if (insertedCount < requiredCount)
                     {
-                        return new ThingCount(thing, pair.Value);
-                    }
-                    else if (_insertedThings[pair.Key].stackCount < pair.Value)
-                    {
-                        int requiredCount = pair.Value - _insertedThings[pair.Key].stackCount;
-                        return new ThingCount(thing, requiredCount);
+                        int remainingCount = Mathf.Min(requiredCount - insertedCount, thingToRequest.stackCount);
+                        return new ThingCountClass(thingToRequest, remainingCount);
                     }
                 }
             }
 
-            return null;
+            return null; // No suitable thing found
         }
 
-        public virtual List<ThingCount> GetRequestedThings() 
+        public int GetInsertedThingCount(ThingDef thingDef) 
         {
-            List<ThingCount> requestedThings = new List<ThingCount>();
+            int count = 0;
+            foreach (Thing insertedThing in _insertedThings)
+            {
+                if (insertedThing.def == thingDef)
+                {
+                    count += insertedThing.stackCount;
+                }
+            }
+            return count;
+        }
+
+        public virtual List<ThingCountClass> GetRequestedThings() 
+        {
+            List<ThingCountClass> requestedThings = new List<ThingCountClass>();
 
             foreach (var pair in _expectedThings)
             {
-                Thing thing = FindThing(pair.Key);
-                if (thing != null)
+                // Find the specific thing based on its definition
+                Thing thingToRequest = FindThing(pair.Key);
+
+                if (thingToRequest != null)
                 {
-                    if (!_insertedThings.ContainsKey(pair.Key))
+                    int requiredCount = pair.Value; // How many are needed
+                    int insertedCount = GetInsertedThingCount(pair.Key);
+
+                    if (insertedCount < requiredCount)
                     {
-                        requestedThings.Add(new ThingCount(thing, pair.Value));
-                    }
-                    else if (_insertedThings[pair.Key].stackCount < pair.Value)
-                    {
-                        int requiredCount = pair.Value - _insertedThings[pair.Key].stackCount;
-                        requestedThings.Add(new ThingCount(thing, requiredCount));
+                        int remainingCount = Mathf.Min(requiredCount - insertedCount, thingToRequest.stackCount);
+                        requestedThings.Add(new ThingCountClass(thingToRequest, remainingCount));
                     }
                 }
             }
@@ -72,14 +87,13 @@ namespace ReimaginedFoundation
 
         public virtual void OnThingHauled(Thing thing)
         {
-            if (_expectedThings != null && _expectedThings.Count > 0 && thing != null)
+            if (thing != null && _expectedThings != null && _expectedThings.Count > 0)
             {
                 OnThingHauledInternal(thing);
                 InsertThing(thing);
 
-                bool requirementSatisfied = _expectedThings.All(pair =>
-                    _insertedThings.TryGetValue(pair.Key, out var thingCount) && thingCount.stackCount == pair.Value);
-                if (requirementSatisfied)
+                // Ensure requirements are evaluated after modifying the state
+                if (_expectedThings.All(pair => GetInsertedThingCount(pair.Key) >= pair.Value))
                 {
                     OnRequirementSatisfied();
                 }
@@ -92,14 +106,14 @@ namespace ReimaginedFoundation
 
         protected virtual void OnRequirementSatisfied() 
         {
+            Log.Message("RequirementSatisfied");
         }
 
         protected virtual void Reset() 
         {
-            Log.Warning("Base Reset");
-            foreach (KeyValuePair<ThingDef, Thing> item in _insertedThings)
+            foreach (Thing thing in _insertedThings)
             {
-                DropThings(item.Value);
+                DropThings(thing);
             }
 
             _expectedThings.Clear();
@@ -125,47 +139,40 @@ namespace ReimaginedFoundation
 
                 // Spawn the dropped item
                 GenSpawn.Spawn(thingToDrop, parent.Position, parent.Map, default(Rot4));
+                Log.Message($"Dropped thing: {thingToDrop} x{countToDrop}/{thingToDrop.stackCount}");
             }
         }
 
         private void InsertThing(Thing thing)
         {
-            if (_expectedThings.ContainsKey(thing.def) && _expectedThings[thing.def] > 0)
+            if (_expectedThings.TryGetValue(thing.def, out int requiredAmount) && requiredAmount > 0)
             {
-                int requiredThingCount = _expectedThings[thing.def];
-                int insertedThingCount;
+                // Calculate how many items are still required
+                int remainingRequiredCount = requiredAmount - GetInsertedThingCount(thing.def);
+                int countToInsert = Mathf.Min(remainingRequiredCount, thing.stackCount);
 
-                // If the thing is already inserted, adjust required count
-                if (_insertedThings.ContainsKey(thing.def))
+                if (countToInsert > 0)
                 {
-                    requiredThingCount -= _insertedThings[thing.def].stackCount;
-                }
+                    Thing stackableThing = _insertedThings.FirstOrDefault(existingThing => thing.def.stackLimit > 1 && existingThing.CanStackWith(thing));
 
-                // Determine how much of the thing can be inserted
-                insertedThingCount = Mathf.Min(requiredThingCount, thing.stackCount);
-
-                // Handle inserting the thing or splitting it
-                if (!_insertedThings.ContainsKey(thing.def))
-                {
-                    // Insert the entire stack if it fits, otherwise split it off
-                    if (insertedThingCount == thing.stackCount)
+                    if (stackableThing != null)
                     {
-                        _insertedThings.Add(thing.def, thing);
-                        thing.DeSpawn();
+                        // Stack with an existing item
+                        Thing stackToAbsorb = (countToInsert == thing.stackCount) ? thing : thing.SplitOff(countToInsert);
+                        stackableThing.TryAbsorbStack(stackToAbsorb, false);
+
+                        Log.Message($"Inserted stackable thing: {stackToAbsorb} {GetInsertedThingCount(stackToAbsorb.def)}");
                     }
                     else
                     {
-                        Thing splitOffThing = thing.SplitOff(insertedThingCount);
-                        _insertedThings.Add(thing.def, splitOffThing);
+                        // Insert as a new stack
+                        Thing thingToInsert = (countToInsert == thing.stackCount) ? thing : thing.SplitOff(countToInsert);
+                        _insertedThings.Add(thingToInsert);
+                        thingToInsert.DeSpawn();
+
+                        Log.Message($"Inserted non-stackable thing: {thingToInsert} {GetInsertedThingCount(thingToInsert.def)} stackCount:{thing.stackCount}");
                     }
                 }
-                else
-                {
-                    // Try to absorb the stack
-                    _insertedThings[thing.def].TryAbsorbStack(thing, false);
-                }
-
-                Log.Message($"Inserted thing: {_insertedThings[thing.def].def} {_insertedThings[thing.def].stackCount}");
             }
         }
     }

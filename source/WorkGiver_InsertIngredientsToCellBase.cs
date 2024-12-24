@@ -68,12 +68,17 @@ namespace ReimaginedFoundation
             }
 
             // Fetch the requested ingredients
-            var lastRequestedThing = ingredientsHolder.GetRequestedThing();
+            ThingCountClass requestedThing = ingredientsHolder.TryRequestedThing();
+            if (requestedThing == null) 
+            {
+                Log.Warning("No available things to fulfill the request.");
+                return FallbackJob;
+            }
 
             // Create and configure the job
             Job job = JobMaker.MakeJob(TargetJobDef, jobGiverSource);
-            job.count = lastRequestedThing.Count;
-            job.targetQueueB = new List<LocalTargetInfo> { new LocalTargetInfo(lastRequestedThing.Thing) };
+            job.count = requestedThing.Count;
+            job.targetQueueB = new List<LocalTargetInfo> { new LocalTargetInfo(requestedThing.thing) };
             job.haulMode = HaulMode.ToCellNonStorage;
 
             return job;
